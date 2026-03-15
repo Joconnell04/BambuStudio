@@ -34,15 +34,32 @@ while getopts "1dpa:st:xbc:h" opt; do
     1 )
         export CMAKE_BUILD_PARALLEL_LEVEL=1
         ;;
-    h ) echo "Usage: ./BuildMac.sh [-1][-d][-s][-x][-b][-c]"
+    h ) echo "Usage: ./BuildMac.sh [-1][-d][-s][-x][-b][-c][-a][-t][-p]"
         echo "   -d: Build deps"
         echo "   -a: Set ARCHITECTURE (arm64 or x86_64 or universal)"
-        echo "   -s: Build slicer only"
+        echo "   -s: Build slicer only (skip rebuilding deps)"
         echo "   -t: Specify minimum version of the target platform, default is 10.15"
-        echo "   -x: Use Ninja CMake generator, default is Xcode"
-        echo "   -b: Build without reconfiguring CMake"
+        echo "   -x: Use Ninja CMake generator (faster than default Xcode generator)"
+        echo "   -b: Build without reconfiguring CMake (incremental build, fastest option)"
         echo "   -c: Set CMake build configuration, default is Release"
         echo "   -1: limit builds to 1 core (where possible)"
+        echo "   -p: Pack deps into a tarball"
+        echo ""
+        echo "Typical workflows:"
+        echo "  First-time build (builds deps + slicer):"
+        echo "    ./BuildMac.sh -a arm64 -x"
+        echo ""
+        echo "  After 'git pull' when only source files changed (deps unchanged):"
+        echo "    ./BuildMac.sh -s -a arm64 -x"
+        echo "    CMake will automatically detect changed files and do an incremental compile."
+        echo ""
+        echo "  Fastest incremental rebuild (skip CMake reconfiguration, source-only changes):"
+        echo "    ./BuildMac.sh -s -a arm64 -x -b"
+        echo "    Use this when CMakeLists.txt and build configuration have NOT changed."
+        echo ""
+        echo "  After 'git pull' when deps/CMakeLists.txt changed:"
+        echo "    ./BuildMac.sh -a arm64 -x"
+        echo "    (rebuilds both deps and slicer)"
         exit 0
         ;;
     * )
