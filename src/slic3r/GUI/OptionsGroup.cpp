@@ -800,6 +800,11 @@ void ConfigOptionsGroup::reload_config()
 		// index in the vector option, zero for scalars
         int 			   opt_index = kvp.second.second;
 		const ConfigOptionDef &option = m_options.at(opt_id).opt;
+
+        // Some pages may contain legacy or conditional options that are not present
+        // in the currently active config/profile; skip them instead of dereferencing null.
+        if (m_config->def()->get(opt_key) == nullptr || m_config->option(opt_key) == nullptr)
+            continue;
 #if 0
         // BBS
         if ((opt_id == "bed_temperature" || opt_id == "bed_temperature_initial_layer") && bed_type_field != nullptr)
@@ -1019,9 +1024,19 @@ boost::any ConfigOptionsGroup::get_config_value(const DynamicPrintConfig& config
     const ConfigOptionDef* opt = config.def()->get(opt_key);
     auto opt_key2 = opt_key;
     if (!opt) {
-        opt_key2 = opt_key.substr(0, opt_key.find('#'));
-        idx      = std::stoi(opt_key.substr(opt_key.find('#') + 1));
-        opt     = config.def()->get(opt_key2);
+        const auto hash_pos = opt_key.find('#');
+        if (hash_pos != std::string::npos) {
+            opt_key2 = opt_key.substr(0, hash_pos);
+            idx      = std::stoi(opt_key.substr(hash_pos + 1));
+            opt      = config.def()->get(opt_key2);
+        }
+    }
+
+    if (!opt)
+        return ret;
+
+    if (config.option(opt_key2) == nullptr) {
+        return ret;
     }
 
     if (opt->nullable)
