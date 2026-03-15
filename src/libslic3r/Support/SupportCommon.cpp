@@ -13,6 +13,7 @@
 #include "../Point.hpp"
 #include "clipper/clipper_z.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <boost/container/static_vector.hpp>
 #include <boost/log/trivial.hpp>
@@ -45,6 +46,55 @@ namespace Slic3r {
 //#define SUPPORT_SURFACES_OFFSET_PARAMETERS ClipperLib::jtMiter, 3.
 //#define SUPPORT_SURFACES_OFFSET_PARAMETERS ClipperLib::jtMiter, 1.5
 #define SUPPORT_SURFACES_OFFSET_PARAMETERS ClipperLib::jtSquare, 0.
+
+namespace {
+
+void filter_small_polygons(Polygons &polygons, double min_area)
+{
+    polygons.erase(
+        std::remove_if(polygons.begin(), polygons.end(), [min_area](const Polygon &polygon) {
+            return std::abs(polygon.area()) < min_area;
+        }),
+        polygons.end());
+}
+
+bool make_continuous_support_base(const PrintObject &object, const SupportParameters &support_params, const Polygons &trimming, Polygons &polygons)
+{
+    if (! object.config().support_continuous_base.value || is_tree(object.config().support_type) || polygons.empty())
+        return false;
+
+    const coord_t line_width = std::max(support_params.first_layer_flow.scaled_width(), support_params.support_material_flow.scaled_width());
+    const double  original_area = std::abs(area(polygons));
+    const double  min_total_area = 9.0 * double(line_width) * double(line_width);
+    if (original_area < min_total_area)
+        return false;
+
+    const coord_t merge_distance = std::max<coord_t>(coord_t(scale_(0.15)), line_width);
+    const coord_t smoothing_distance = std::max<coord_t>(coord_t(scale_(0.05)), line_width / 2);
+    const double  min_island_area = 2.25 * double(line_width) * double(line_width);
+
+    Polygons continuous = smooth_outward(
+        closing(polygons, float(merge_distance), float(merge_distance), SUPPORT_SURFACES_OFFSET_PARAMETERS),
+        smoothing_distance);
+
+    if (! trimming.empty())
+        continuous = diff(std::move(continuous), trimming);
+
+    continuous = union_safety_offset(std::move(continuous));
+    continuous = simplify_polygons(continuous, false);
+    filter_small_polygons(continuous, min_island_area);
+    if (continuous.empty())
+        return false;
+
+    const double continuous_area = std::abs(area(continuous));
+    if (continuous_area < original_area * 0.85 || continuous_area > original_area * 1.35)
+        return false;
+
+    polygons = std::move(continuous);
+    return true;
+}
+
+} // namespace
 
 
 // Convert some of the intermediate layers into top/bottom interface layers as well as base interface layers.
@@ -445,6 +495,7 @@ SupportGeneratorLayersPtr generate_raft_base(
                     raft = diff(expand(raft, step), trimming);
             } else
                 raft = diff(raft, trimming);
+            make_continuous_support_base(object, support_params, trimming, raft);
             if (! interface_polygons.empty())
                 columns_base->polygons = diff(columns_base->polygons, interface_polygons);
         }

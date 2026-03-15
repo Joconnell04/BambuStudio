@@ -8,6 +8,15 @@
 using namespace Slic3r::Test;
 using namespace Slic3r;
 
+namespace {
+
+Polygons support_layer_coverage(const SupportLayer &layer)
+{
+    return union_(layer.support_fills.polygons_covered_by_width());
+}
+
+}
+
 TEST_CASE("SupportMaterial: Three raft layers created", "[SupportMaterial]")
 {
 	Slic3r::Print print;
@@ -117,6 +126,38 @@ SCENARIO("SupportMaterial: support_layers_z and contact_distance", "[SupportMate
 //            THEN("Layers above top surfaces are spaced correctly")	{ REQUIRE(d == true); }
         }
     }
+}
+
+TEST_CASE("SupportMaterial: continuous support base only changes the first support layer", "[SupportMaterial]")
+{
+    auto build_print = [](Slic3r::Print &print, bool continuous_support_base) {
+        Slic3r::Test::init_and_process_print({ TestMesh::overhang }, print, {
+            { "support_material", 1 },
+            { "support_on_build_plate_only", 1 },
+            { "raft_first_layer_expansion", 0.0 },
+            { "support_continuous_base", continuous_support_base ? 1 : 0 }
+        });
+    };
+
+    Slic3r::Print default_print;
+    Slic3r::Print continuous_print;
+    build_print(default_print, false);
+    build_print(continuous_print, true);
+
+    ConstSupportLayerPtrsAdaptor default_layers = default_print.objects().front()->support_layers();
+    ConstSupportLayerPtrsAdaptor continuous_layers = continuous_print.objects().front()->support_layers();
+
+    REQUIRE(default_layers.size() == continuous_layers.size());
+    REQUIRE(default_layers.size() > 1);
+
+    const Polygons default_first = support_layer_coverage(*default_layers.front());
+    const Polygons continuous_first = support_layer_coverage(*continuous_layers.front());
+
+    REQUIRE(continuous_first.size() < default_first.size());
+    CHECK(std::abs(area(continuous_first)) >= std::abs(area(default_first)) * 0.95);
+
+    for (size_t i = 1; i < default_layers.size(); ++ i)
+        CHECK(default_layers[i]->support_fills.length() == Approx(continuous_layers[i]->support_fills.length()));
 }
 
 #if 0

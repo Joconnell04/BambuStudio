@@ -4999,6 +4999,14 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionFloat(2.5));
 
+    def = this->add("support_continuous_base", coBool);
+    def->label = L("Continuous support base (experimental)");
+    def->category = L("Support");
+    def->tooltip = L("Merge and simplify only the first support layer that touches the build plate to create a more continuous support base. "
+                     "Upper support layers remain unchanged where possible. Currently applies to normal support.");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
+
     def = this->add("support_expansion", coFloat);
     def->label = L("Normal Support expansion");
     def->category = L("Support");

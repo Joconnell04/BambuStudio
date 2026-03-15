@@ -822,7 +822,7 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
     bool have_support_soluble = have_support_material && config->opt_float("support_top_z_distance") == 0;
     auto support_style = config->opt_enum<SupportMaterialStyle>("support_style");
     for (auto el : { "support_style", "support_base_pattern",
-                    "support_base_pattern_spacing", "support_expansion", "support_angle",
+                    "support_base_pattern_spacing", "support_continuous_base", "support_expansion", "support_angle",
                     "support_interface_pattern", "support_interface_top_layers",
                     "bridge_no_support", "max_bridge_length", "support_top_z_distance", "support_bottom_z_distance",
                      //BBS: add more support params to dependent of enable_support
@@ -841,6 +841,7 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
     for (auto el : {"tree_support_branch_angle", "tree_support_branch_distance", "tree_support_branch_diameter", "tree_support_branch_diameter_angle", "max_bridge_length"})
         toggle_line(el, support_is_tree);
     toggle_line("support_critical_regions_only", is_auto(support_type) && support_is_tree);
+    toggle_line("support_continuous_base", have_support_material && !support_is_tree);
 
     toggle_line("detect_floating_vertical_shell", config->option<ConfigOptionBool>("detect_narrow_internal_solid_infill")->value);
     toggle_line("vertical_shell_speed", config->option<ConfigOptionBool>("detect_narrow_internal_solid_infill")->value, variant_index);
