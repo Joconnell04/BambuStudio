@@ -159,6 +159,7 @@ function build_slicer() {
                     -G "${SLICER_CMAKE_GENERATOR}" \
                     -DBBL_RELEASE_TO_PUBLIC=1 \
                     -DBBL_INTERNAL_TESTING=0 \
+                    -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
                     -DCMAKE_PREFIX_PATH="$DEPS/usr/local" \
                     -DCMAKE_INSTALL_PREFIX="$PWD/BambuStudio" \
                     -DCMAKE_BUILD_TYPE="$BUILD_CONFIG" \

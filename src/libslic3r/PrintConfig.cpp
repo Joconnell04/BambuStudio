@@ -5003,7 +5003,9 @@ void PrintConfigDef::init_fff_params()
     def->label = L("Continuous support base (experimental)");
     def->category = L("Support");
     def->tooltip = L("Merge and simplify only the first support layer that touches the build plate to create a more continuous support base. "
-                     "Upper support layers remain unchanged where possible. Currently applies to normal support.");
+                     "Each cluster of support columns is replaced with a smooth, convex (oval-like) footprint that minimises sharp direction "
+                     "changes for the nozzle on the first layer. Upper support layers remain unchanged. "
+                     "Applies to both normal and tree (auto) support.");
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionBool(false));
 
