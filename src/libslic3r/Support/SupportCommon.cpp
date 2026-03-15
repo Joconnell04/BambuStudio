@@ -10,6 +10,7 @@
 #include "../Fill/FillBase.hpp"
 #include "../MutablePolygon.hpp"
 #include "../Geometry.hpp"
+#include "../Geometry/ConvexHull.hpp"
 #include "../Point.hpp"
 #include "clipper/clipper_z.hpp"
 
@@ -60,7 +61,8 @@ void filter_small_polygons(Polygons &polygons, double min_area)
 
 bool make_continuous_support_base(const PrintObject &object, const SupportParameters &support_params, const Polygons &trimming, Polygons &polygons)
 {
-    if (! object.config().support_continuous_base.value || is_tree(object.config().support_type) || polygons.empty())
+    // Feature now applies to both normal and tree (auto) supports.
+    if (! object.config().support_continuous_base.value || polygons.empty())
         return false;
 
     const coord_t line_width = std::max(support_params.first_layer_flow.scaled_width(), support_params.support_material_flow.scaled_width());
@@ -69,14 +71,42 @@ bool make_continuous_support_base(const PrintObject &object, const SupportParame
     if (original_area < min_total_area)
         return false;
 
-    const coord_t merge_distance = std::max<coord_t>(coord_t(scale_(0.15)), line_width);
-    const coord_t smoothing_distance = std::max<coord_t>(coord_t(scale_(0.05)), line_width / 2);
-    const double  min_island_area = 2.25 * double(line_width) * double(line_width);
+    // Use a larger merge distance to aggressively merge nearby support islands
+    // into smooth, continuous blobs. 2 mm minimum (or 5× line width for thick
+    // nozzles) bridges typical gaps between closely-spaced support columns so
+    // that the result is a single rounded blob rather than a collection of dots.
+    // Both values are in Clipper's internal scaled coordinate units.
+    const coord_t merge_distance    = std::max<coord_t>(coord_t(scale_(2.0)), 5 * line_width);
+    // Smoothing distance rounded up compared to old code (0.05 mm → 0.5 mm min)
+    // so that convex-hull corners are visibly arc-like rather than just clipped.
+    const coord_t smoothing_distance = std::max<coord_t>(coord_t(scale_(0.5)), line_width);
+    const double  min_island_area   = 2.25 * double(line_width) * double(line_width);
+    // The convex hull of a cluster of support columns naturally grows the area.
+    // Allow up to 4× expansion; reject if trimming removes more than 20 %.
+    static constexpr double MAX_AREA_EXPANSION_FACTOR = 4.0;
+    static constexpr double MIN_AREA_RETENTION_FACTOR = 0.80;
 
-    Polygons continuous = smooth_outward(
-        closing(polygons, float(merge_distance), float(merge_distance), SUPPORT_SURFACES_OFFSET_PARAMETERS),
-        smoothing_distance);
+    // Step 1: Aggressive closing to merge nearby support columns into blobs.
+    Polygons merged = closing(polygons, float(merge_distance), float(merge_distance), SUPPORT_SURFACES_OFFSET_PARAMETERS);
 
+    // Step 2: Apply convex hull per island so that each merged blob becomes a
+    //         smooth, minimal-edge shape (naturally oval / ellipse-like).
+    //         This eliminates jagged concavities and direction-reversals in the
+    //         first layer path that cause nozzle "jolts".
+    Polygons continuous;
+    continuous.reserve(merged.size());
+    for (const ExPolygon &expoly : union_ex(merged)) {
+        Polygon hull = convex_hull(expoly.contour.points);
+        // Round the convex-hull corners for an even smoother outline.
+        hull = smooth_outward(hull, smoothing_distance);
+        if (! hull.points.empty())
+            continuous.push_back(std::move(hull));
+    }
+
+    if (continuous.empty())
+        return false;
+
+    // Step 3: Remove any area that would overlap with the printed object.
     if (! trimming.empty())
         continuous = diff(std::move(continuous), trimming);
 
@@ -86,8 +116,12 @@ bool make_continuous_support_base(const PrintObject &object, const SupportParame
     if (continuous.empty())
         return false;
 
+    // Step 4: Sanity-check the resulting area.
+    // The convex hull naturally expands the footprint, so allow up to MAX_AREA_EXPANSION_FACTOR
+    // times the original area.  Reject if the result shrank too much (< MIN_AREA_RETENTION_FACTOR)
+    // as that would indicate excessive trimming by the object boundary.
     const double continuous_area = std::abs(area(continuous));
-    if (continuous_area < original_area * 0.85 || continuous_area > original_area * 1.35)
+    if (continuous_area < original_area * MIN_AREA_RETENTION_FACTOR || continuous_area > original_area * MAX_AREA_EXPANSION_FACTOR)
         return false;
 
     polygons = std::move(continuous);
