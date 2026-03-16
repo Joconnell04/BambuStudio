@@ -59,10 +59,10 @@ void filter_small_polygons(Polygons &polygons, double min_area)
         polygons.end());
 }
 
-bool make_continuous_support_base(const PrintObject &object, const SupportParameters &support_params, const Polygons &trimming, Polygons &polygons)
+bool make_continuous_support_base(const PrintObjectConfig &config, const SupportParameters &support_params, const Polygons &trimming, Polygons &polygons)
 {
     // Feature now applies to both normal and tree (auto) supports.
-    if (! object.config().support_continuous_base.value || polygons.empty())
+    if (! config.support_continuous_base.value || polygons.empty())
         return false;
 
     const coord_t line_width = std::max(support_params.first_layer_flow.scaled_width(), support_params.support_material_flow.scaled_width());
@@ -96,7 +96,7 @@ bool make_continuous_support_base(const PrintObject &object, const SupportParame
     Polygons continuous;
     continuous.reserve(merged.size());
     for (const ExPolygon &expoly : union_ex(merged)) {
-        Polygon hull = convex_hull(expoly.contour.points);
+        Polygon hull = Geometry::convex_hull(expoly.contour.points);
         // Round the convex-hull corners for an even smoother outline.
         hull = smooth_outward(hull, smoothing_distance);
         if (! hull.points.empty())
@@ -529,7 +529,7 @@ SupportGeneratorLayersPtr generate_raft_base(
                     raft = diff(expand(raft, step), trimming);
             } else
                 raft = diff(raft, trimming);
-            make_continuous_support_base(object, support_params, trimming, raft);
+            make_continuous_support_base(object.config(), support_params, trimming, raft);
             if (! interface_polygons.empty())
                 columns_base->polygons = diff(columns_base->polygons, interface_polygons);
         }
@@ -1552,6 +1552,7 @@ SupportGeneratorLayersPtr generate_support_layers(
 }
 
 void generate_support_toolpaths(
+    const PrintObject                 &object,
     SupportLayerPtrs                    &support_layers,
     const PrintObjectConfig             &config,
     const SupportParameters             &support_params,
@@ -1696,7 +1697,7 @@ void generate_support_toolpaths(
     std::vector<LayerCache>             layer_caches(support_layers.size());
 
     tbb::parallel_for(tbb::blocked_range<size_t>(n_raft_layers, support_layers.size()),
-        [&config, &slicing_params, &support_params, &support_layers, &bottom_contacts, &top_contacts, &intermediate_layers, &interface_layers, &base_interface_layers, &cooldown_areas, &layer_caches, &loop_interface_processor,
+        [&object, &config, &slicing_params, &support_params, &support_layers, &bottom_contacts, &top_contacts, &intermediate_layers, &interface_layers, &base_interface_layers, &cooldown_areas, &layer_caches, &loop_interface_processor,
             &bbox_object, &angles, &interface_angles, n_raft_layers, link_max_length_factor]
             (const tbb::blocked_range<size_t>& range) {
         // Indices of the 1st layer in their respective container at the support layer height.
@@ -1893,6 +1894,19 @@ void generate_support_toolpaths(
                     filler->link_max_length = coord_t(scale_(filler->spacing * link_max_length_factor / density));
                     sheath  = true;
                     no_sort = true;
+
+                    // Ensure the very first support layer is simplified before any
+                    // support perimeter / infill paths are generated.
+                    Polygons layer1_polygons = base_layer.polygons_to_extrude();
+                    Polygons trimming;
+                    if (! object.layers().empty()) {
+                        trimming = offset(
+                            object.layers().front()->lslices,
+                            (float)scale_(support_params.gap_xy_first_layer),
+                            SUPPORT_SURFACES_OFFSET_PARAMETERS);
+                    }
+                    if (make_continuous_support_base(config, support_params, trimming, layer1_polygons))
+                        base_layer.set_polygons_to_extrude(std::move(layer1_polygons));
                 } else if (support_params.support_style == SupportMaterialStyle::smsTreeOrganic) {
                     // if the tree supports are too tall, use double wall to make it stronger
                     SupportParameters support_params2 = support_params;

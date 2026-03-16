@@ -841,7 +841,7 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
     for (auto el : {"tree_support_branch_angle", "tree_support_branch_distance", "tree_support_branch_diameter", "tree_support_branch_diameter_angle", "max_bridge_length"})
         toggle_line(el, support_is_tree);
     toggle_line("support_critical_regions_only", is_auto(support_type) && support_is_tree);
-    toggle_line("support_continuous_base", have_support_material && !support_is_tree);
+    toggle_line("support_continuous_base", have_support_material);
 
     toggle_line("detect_floating_vertical_shell", config->option<ConfigOptionBool>("detect_narrow_internal_solid_infill")->value);
     toggle_line("vertical_shell_speed", config->option<ConfigOptionBool>("detect_narrow_internal_solid_infill")->value, variant_index);

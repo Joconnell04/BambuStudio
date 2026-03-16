@@ -4231,7 +4231,7 @@ static void generate_support_areas(Print &print, TreeSupport* tree_support, cons
 
         // Don't fill in the tree supports, make them hollow with just a single sheath line.
         print.set_status(69, _L("Generating support"));
-        generate_support_toolpaths(print_object.support_layers(), print_object.config(), support_params, print_object.slicing_parameters(),
+        generate_support_toolpaths(print_object, print_object.support_layers(), print_object.config(), support_params, print_object.slicing_parameters(),
             raft_layers, bottom_contacts, top_contacts, intermediate_layers, interface_layers, base_interface_layers, cooldown_areas);
 
         auto t_end = std::chrono::high_resolution_clock::now();
